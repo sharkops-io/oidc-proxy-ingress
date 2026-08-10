@@ -32,7 +32,7 @@ releases:
   - name: hubble-auth
     namespace: kube-system
     chart: sharkops-oidc-proxy/oidc-proxy-ingress
-    version: 0.4.0
+    version: 0.5.0
     values:
       - hubble-ingress-values.yaml
 ```
@@ -147,7 +147,8 @@ inert — rotation still requires a manual restart.
 | `certIssuer` | `letsencrypt-prod` | |
 | `issuerUrl` | `https://auth.example.com` | The only line that changes when the IdP changes |
 | `clientId` | `oauth2-proxy` | One client can serve every host |
-| `cookieDomain` | `.example.com` | Shared so one login covers all protected hosts |
+| `cookieDomain` | `.example.com` | Empty scopes the cookie per host. See [Cookie scope](#cookie-scope) |
+| `whitelistDomain` | `.example.com` | Post-login redirect whitelist; separate from `cookieDomain` on purpose |
 | `existingSecret` | `oauth2-proxy-credentials` | Must exist in the release namespace |
 | `cookieName` | `_oauth2_proxy` | Must differ between fleets on different issuers sharing a cookie domain. See [Running two fleets](#running-two-fleets) |
 | `allowUnverifiedEmail` | `false` | **Must be `true` against Authentik.** See [Unverified email](#unverified-email) |
@@ -163,6 +164,27 @@ inert — rotation still requires a manual restart.
 `redirect-url` is not configurable — it is always
 `https://<host>/oauth2/callback`, derived from the entry's host. Register
 that URL on the OIDC client for every protected host.
+
+## Cookie scope
+
+A `cookieDomain` set to a parent domain gives you one login across every host
+under it. The cost is that the browser sends that cookie to **every** host in
+the domain, including services that have nothing to do with authentication.
+
+That cost is not theoretical. Two fleets' cookies together overran the
+4096-byte default header buffer of an unrelated Fiber/fasthttp app in the same
+domain, which then returned **431 Request Header Fields Too Large** to every
+request. It had never been touched — it simply shared a parent domain with the
+proxies. The problem grows with each protected host and is paid by services that
+get no benefit.
+
+Leave `cookieDomain` empty to omit the flag; oauth2-proxy then scopes each
+cookie to its own host. SSO still works, because the IdP keeps its own session —
+the extra hop is a silent redirect, not a second login.
+
+`whitelistDomain` stays set to the parent domain either way. It governs where
+oauth2-proxy will redirect after login, and collapsing it with `cookieDomain`
+would start rejecting valid post-login redirects.
 
 ## Running two fleets
 

@@ -7,13 +7,32 @@ certIssuer: letsencrypt-prod
 issuerUrl: https://auth.example.com
 clientId: oauth2-proxy
 
-# Cookie scope. Shared across *.example.com so one login covers every
-# protected host. IMPORTANT: because the cookie is shared, `cookie-secret`
-# (see Credentials below) must be byte-identical in every namespace this
-# chart is released into. A mismatched cookie-secret makes one proxy reject
-# the cookie another proxy minted, which presents as an infinite redirect
-# loop rather than a clear error.
+# Cookie scope.
+#
+# Set to a parent domain (e.g. `.example.com`), one login covers every
+# protected host under it - but the browser then sends that cookie to EVERY
+# host in the domain, including services with nothing to do with auth. Two
+# fleets' cookies together overran the 4096-byte default header buffer of an
+# unrelated Fiber app, which answered 431 to every request until this was
+# narrowed. The cost grows with each protected host and is paid by services
+# that get no benefit from it.
+#
+# Leave EMPTY to omit the flag, and oauth2-proxy scopes the cookie to the
+# request host by itself. Each protected host then keeps its own session, and
+# SSO still works - the IdP's own session cookie means the extra hop is a
+# silent redirect rather than a second login.
+#
+# IMPORTANT when this IS set to a shared parent: `cookie-secret` (see
+# Credentials below) must be byte-identical in every namespace this chart is
+# released into. A mismatched cookie-secret makes one proxy reject a cookie
+# another proxy minted, which presents as an infinite redirect loop rather
+# than a clear error.
 cookieDomain: .example.com
+
+# Domains oauth2-proxy will redirect to after login. Deliberately SEPARATE from
+# cookieDomain: emptying that one scopes cookies per host, but the redirect
+# whitelist must still span the domain or post-login redirects get rejected.
+whitelistDomain: .example.com
 
 # Name of the session cookie oauth2-proxy sets. oauth2-proxy's own default is
 # `_oauth2_proxy` for every instance, which is fine until two releases share a

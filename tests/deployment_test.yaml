@@ -409,3 +409,39 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].args[3]
           value: --redirect-url=https://hubble.example.com/oauth2/callback
+
+  # A cookie scoped to the parent domain is sent to EVERY host in it, including
+  # services with no connection to auth. Two fleets' cookies together exceeded
+  # the 4096-byte default header buffer of an unrelated Fiber app, which then
+  # returned 431 to every request.
+  - it: should scope the cookie to the parent domain when one is given
+    set:
+      cookieDomain: .example.com
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-domain=.example.com
+
+  - it: should omit --cookie-domain entirely when it is empty
+    set:
+      cookieDomain: ""
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-domain=
+      # oauth2-proxy then scopes the cookie to the request host by itself.
+      # The redirect whitelist must NOT collapse with it, or post-login
+      # redirects to other hosts in the domain start being rejected.
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --whitelist-domain=.example.com

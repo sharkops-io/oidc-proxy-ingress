@@ -56,9 +56,11 @@ spec:
             {{- range $allowedGroups }}
             - --allowed-group={{ . }}
             {{- end }}
+            {{- if $.Values.cookieDomain }}
             - --cookie-domain={{ $.Values.cookieDomain }}
+            {{- end }}
             - --cookie-name={{ $.Values.cookieName }}
-            - --whitelist-domain={{ $.Values.cookieDomain }}
+            - --whitelist-domain={{ $.Values.whitelistDomain }}
             - --cookie-secure=true
             - --skip-provider-button=true
             - --reverse-proxy=true
