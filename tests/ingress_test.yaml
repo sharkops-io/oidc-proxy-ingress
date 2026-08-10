@@ -1,0 +1,8 @@
+suite: ingress
+templates:
+  - ingress.yaml
+tests:
+  - it: should create no resources when ingresses is empty
+    asserts:
+      - hasDocuments:
+          count: 0

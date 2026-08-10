@@ -1,0 +1,45 @@
+# Ingress class and cert-manager issuer for every rendered Ingress.
+ingressClassName: cilium
+certIssuer: letsencrypt-prod
+
+# The OIDC issuer oauth2-proxy authenticates against. Issuer-agnostic on
+# purpose: this is the only line that changes when the IdP changes.
+issuerUrl: https://auth.example.com
+clientId: oauth2-proxy
+
+# Cookie scope. Shared across *.example.com so one login covers every
+# protected host.
+cookieDomain: .example.com
+
+# Secret in the release namespace holding keys `client-secret` and
+# `cookie-secret`. Matches the sharkops-universal sidecar convention so a
+# single OpenBao path serves both.
+existingSecret: oauth2-proxy-credentials
+
+image:
+  repository: quay.io/oauth2-proxy/oauth2-proxy
+  tag: v7.9.0
+  pullPolicy: IfNotPresent
+
+# Per-proxy pod resources. Four of these replace one embedded outpost, so
+# keep them small. No CPU limit - throttling a login path is worse than
+# letting it burst.
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# One entry per protected host. Each renders a Deployment, a Service and an
+# Ingress.
+#
+# ingresses:
+#   - name: hubble-ui
+#     host: hubble.example.com
+#     tlsSecret: hubble-tls
+#     upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+#     annotations:
+#       gethomepage.dev/enabled: "true"
+#       gethomepage.dev/name: Hubble
+ingresses: []
