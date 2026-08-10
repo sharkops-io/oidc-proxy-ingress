@@ -1,0 +1,68 @@
+{{- range .Values.ingresses }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oidc-proxy-ingress.proxyName" .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
+    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+  template:
+    metadata:
+      labels:
+        {{- include "oidc-proxy-ingress.labels" $ | nindent 8 }}
+        app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url={{ $.Values.issuerUrl }}
+            - --client-id={{ $.Values.clientId }}
+            - --redirect-url=https://{{ .host }}/oauth2/callback
+            - --upstream={{ .upstream }}
+            - --http-address=[::]:4180
+            - --email-domain=*
+            - --cookie-domain={{ $.Values.cookieDomain }}
+            - --whitelist-domain={{ $.Values.cookieDomain }}
+            - --cookie-secure=true
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - --pass-host-header=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.existingSecret }}
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.existingSecret }}
+                  key: cookie-secret
+          ports:
+            - name: http
+              containerPort: 4180
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 4180
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+{{- end }}
