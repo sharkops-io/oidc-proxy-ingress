@@ -6,3 +6,95 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should create an Ingress for each entry
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should route to the entry's own oauth2-proxy service
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: hubble-ui-oauth2-proxy
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 80
+
+  - it: should use the configured host and TLS secret
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: hubble.example.com
+      - equal:
+          path: spec.tls[0].secretName
+          value: hubble-tls
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: hubble.example.com
+
+  - it: should apply cert-manager annotation with the configured issuer
+    set:
+      certIssuer: letsencrypt-staging
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-staging
+
+  - it: should merge extra annotations from the ingress entry
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+          annotations:
+            gethomepage.dev/enabled: "true"
+            gethomepage.dev/name: Hubble
+    asserts:
+      - equal:
+          path: metadata.annotations["gethomepage.dev/enabled"]
+          value: "true"
+      - equal:
+          path: metadata.annotations["gethomepage.dev/name"]
+          value: Hubble
+
+  - it: should use the configured ingressClassName
+    set:
+      ingressClassName: nginx
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
