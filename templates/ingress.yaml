@@ -1,30 +1,42 @@
 {{- range .Values.ingresses }}
+{{- $name := required "ingresses[].name is required" .name }}
+{{- $host := required (printf "ingresses[].host is required for entry %q" $name) .host }}
+{{- $tlsSecret := required (printf "ingresses[].tlsSecret is required for entry %q" $name) .tlsSecret }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .name }}
+  name: {{ $name }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
   {{- $annotations := merge (deepCopy (default (dict) .annotations)) (dict "cert-manager.io/cluster-issuer" $.Values.certIssuer) }}
   annotations:
-    {{- toYaml $annotations | nindent 4 }}
+    {{- /*
+    Rendered key-by-key (rather than a single `toYaml $annotations`) so
+    every value is forced through `quote`. Ingress annotations are always
+    strings; a consumer writing `gethomepage.dev/enabled: true` unquoted in
+    YAML would otherwise merge in as a native bool and the API server
+    would reject the Ingress.
+    */}}
+    {{- range $key, $value := $annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
 spec:
   ingressClassName: {{ $.Values.ingressClassName }}
   tls:
-    - secretName: {{ .tlsSecret }}
+    - secretName: {{ $tlsSecret }}
       hosts:
-        - {{ .host }}
+        - {{ $host }}
   rules:
-    - host: {{ .host }}
+    - host: {{ $host }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "oidc-proxy-ingress.proxyName" .name }}
+                name: {{ include "oidc-proxy-ingress.proxyName" $name }}
                 port:
                   number: 80
 {{- end }}

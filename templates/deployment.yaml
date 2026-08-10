@@ -1,36 +1,55 @@
 {{- range .Values.ingresses }}
+{{- $name := required "ingresses[].name is required" .name }}
+{{- $host := required (printf "ingresses[].host is required for entry %q" $name) .host }}
+{{- $upstream := required (printf "ingresses[].upstream is required for entry %q" $name) .upstream }}
+{{- $replicas := .replicas | default $.Values.replicas }}
+{{- $allowedGroups := $.Values.allowedGroups }}
+{{- if hasKey . "allowedGroups" }}
+{{- $allowedGroups = .allowedGroups }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "oidc-proxy-ingress.proxyName" .name }}
+  name: {{ include "oidc-proxy-ingress.proxyName" $name }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
-    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
+  {{- with $.Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  replicas: 1
+  replicas: {{ $replicas }}
   selector:
     matchLabels:
-      app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+      app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
   template:
     metadata:
       labels:
         {{- include "oidc-proxy-ingress.labels" $ | nindent 8 }}
-        app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+        app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
     spec:
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
       containers:
         - name: oauth2-proxy
           image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml $.Values.securityContext | nindent 12 }}
           args:
             - --provider=oidc
             - --oidc-issuer-url={{ $.Values.issuerUrl }}
             - --client-id={{ $.Values.clientId }}
-            - --redirect-url=https://{{ .host }}/oauth2/callback
-            - --upstream={{ .upstream }}
+            - --redirect-url=https://{{ $host }}/oauth2/callback
+            - --upstream={{ $upstream }}
             - --http-address=[::]:4180
             - --email-domain=*
+            {{- range $allowedGroups }}
+            - --allowed-group={{ . }}
+            {{- end }}
             - --cookie-domain={{ $.Values.cookieDomain }}
             - --whitelist-domain={{ $.Values.cookieDomain }}
             - --cookie-secure=true
