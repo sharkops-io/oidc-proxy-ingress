@@ -33,7 +33,9 @@ existingSecret: oauth2-proxy-credentials
 # authorization input at all. Trust comes from the issuer having authenticated
 # the user. It would matter if access were granted by email address or domain,
 # where an unverified address is an impersonation vector - so this stays
-# opt-in, and off by default.
+# opt-in, and off by default. (Note the current consumers are LAN-only, which
+# lowers the stakes but is NOT the reason this is safe - the reason is that the
+# claim gates nothing.)
 allowUnverifiedEmail: false
 
 # OIDC groups permitted to authenticate, chart-wide. Empty (the default)

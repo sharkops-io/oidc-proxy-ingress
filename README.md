@@ -192,6 +192,11 @@ on the issuer having authenticated the user. It would matter if you granted
 access by email address or domain, where an unverified address becomes an
 impersonation vector. Hence opt-in, and off by default.
 
+That reasoning does not depend on network position. The current consumers happen
+to be LAN-only, but do not treat that as the justification - a chart used on an
+internet-facing host would be equally safe under `--email-domain=*` and equally
+unsafe if it gated on the address.
+
 The alternative - a custom scope mapping asserting `email_verified: True` - makes
 Authentik state something it has not checked. Prefer the flag.
 
