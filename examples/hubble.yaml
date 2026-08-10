@@ -1,5 +1,17 @@
-# Hubble UI, protected. Deployed into kube-system so the Ingress and its
-# oauth2-proxy Service share a namespace, as Kubernetes requires.
+# Hubble UI, protected.
+#
+# The Ingress and its oauth2-proxy Service always land in the release's
+# own namespace - that's a chart invariant, not a Kubernetes requirement
+# tied to the upstream. `upstream` is reached cross-namespace by FQDN, so
+# the release namespace is a free choice. This example uses kube-system as
+# a convenience because that's where hubble-ui itself lives, not because
+# it has to.
+#
+# Migrating a live authentik-proxy-ingress release in place? See the
+# README's "Migrating from authentik-proxy-ingress" section: keep the same
+# release namespace and release name, keep this entry's `name` unchanged
+# so the Ingress object name doesn't change, add `upstream:`, and swap the
+# `chart:` reference.
 ingresses:
   - name: hubble-ui
     host: hubble.example.com
