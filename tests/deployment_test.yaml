@@ -7,7 +7,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should create one Deployment per entry
+  - it: should create one Deployment per entry, one for each distinct entry
     set:
       ingresses:
         - name: hubble-ui
@@ -21,6 +21,24 @@ tests:
     asserts:
       - hasDocuments:
           count: 2
+      # hasDocuments alone would pass for two identical documents; pin each
+      # document's identity so the test actually distinguishes the entries.
+      - equal:
+          path: metadata.name
+          value: hubble-ui-oauth2-proxy
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].args[3]
+          value: --redirect-url=https://hubble.example.com/oauth2/callback
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: longhorn-ui-oauth2-proxy
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.containers[0].args[3]
+          value: --redirect-url=https://longhorn.example.com/oauth2/callback
+        documentIndex: 1
 
   - it: should name the Deployment after the entry
     set:
@@ -105,3 +123,205 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.key
           value: cookie-secret
+
+  - it: should set every security-relevant oauth2-proxy flag
+    # Deleting any one of these from the template left all tests green
+    # before this test existed - assert them explicitly.
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --provider=oidc
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-secure=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --email-domain=*
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-domain=.example.com
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --whitelist-domain=.example.com
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --reverse-proxy=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --skip-provider-button=true
+
+  - it: should expose the proxy on containerPort 4180
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 4180
+
+  - it: should render into the release namespace
+    release:
+      namespace: my-namespace
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-namespace
+
+  - it: should omit --allowed-group entirely when allowedGroups is unset
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=
+
+  - it: should render one --allowed-group per chart-wide group
+    set:
+      allowedGroups:
+        - platform-admins
+        - sre
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=platform-admins
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=sre
+
+  - it: should let a per-entry allowedGroups override the chart-wide list
+    set:
+      allowedGroups:
+        - platform-admins
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+          allowedGroups:
+            - observability-team
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=observability-team
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=platform-admins
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --allowed-group=platform-admins
+        documentIndex: 1
+
+  - it: should default to one replica, overridable per entry
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+          replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+        documentIndex: 0
+      - equal:
+          path: spec.replicas
+          value: 3
+        documentIndex: 1
+
+  - it: should apply the Reloader annotation to the Deployment metadata by default
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "true"
+
+  - it: should apply the default pod and container securityContext
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+
+  - it: should fail to render when an entry's name is missing
+    set:
+      ingresses:
+        - host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingresses[].name is required"
+
+  - it: should fail to render when an entry's host is missing
+    set:
+      ingresses:
+        - name: hubble-ui
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - failedTemplate:
+          errorMessage: 'ingresses[].host is required for entry "hubble-ui"'
+
+  - it: should fail to render when an entry's upstream is missing
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+    asserts:
+      - failedTemplate:
+          errorMessage: 'ingresses[].upstream is required for entry "hubble-ui"'
