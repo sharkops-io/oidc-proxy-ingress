@@ -32,7 +32,7 @@ releases:
   - name: hubble-auth
     namespace: kube-system
     chart: sharkops-oidc-proxy/oidc-proxy-ingress
-    version: 0.1.0
+    version: 0.2.0
     values:
       - hubble-ingress-values.yaml
 ```
@@ -44,6 +44,62 @@ namespace**. The proxy Deployment and Service are therefore always rendered
 into the release namespace — so set the release namespace to wherever you
 want the Ingress and its TLS secret to live. Only the `upstream` is
 cross-namespace, reached by FQDN from inside the proxy pod.
+
+## NetworkPolicy prerequisite
+
+Every rendered pod carries a fixed `app.kubernetes.io/component: oauth2-proxy`
+label (not configurable — its value is its stability). If the upstream you're
+protecting sits behind a NetworkPolicy, that policy needs a `from` clause
+admitting this chart's pods before you migrate the host to it, or the upstream
+will start 502ing the moment traffic starts flowing through the proxy instead
+of the previous path. Concretely, add an ingress rule like:
+
+```yaml
+- from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: <release-namespace>
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: oauth2-proxy
+```
+
+At the time of writing, Prometheus, Alertmanager and the Longhorn frontend
+are each behind a NetworkPolicy that only admits Authentik's outpost pods —
+none of them admit this chart's pods yet. Hubble has no NetworkPolicy, so it
+needs no change here. Editing those policies is a separate piece of work;
+this chart only gives them something stable to select on.
+
+## Authorization
+
+`--email-domain=*` is hardcoded, with no group restriction by default. That
+means: **absent `allowedGroups`, any identity the OIDC issuer authenticates
+is admitted**, and the IdP's application policy (who is allowed to reach this
+client at all) is the *only* gate. This differs from the predecessor chart,
+which could bind a distinct authorization policy per host inside Authentik;
+this chart uses one shared `clientId` for every protected host, so the IdP
+makes one all-or-nothing decision unless you set `allowedGroups`.
+
+Set `allowedGroups` (chart-wide, per entry, or both) to add a real gate:
+
+```yaml
+allowedGroups:        # chart-wide default, applies to every entry below
+  - platform-admins
+
+ingresses:
+  - name: hubble-ui
+    host: hubble.example.com
+    tlsSecret: hubble-tls
+    upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    allowedGroups:     # overrides the chart-wide list for this entry only
+      - observability-team
+```
+
+An entry with no `allowedGroups` key falls back to the chart-wide value; an
+entry that sets `allowedGroups` (even to `[]`) uses its own list instead. Each
+group renders as one `--allowed-group=<group>` argument; the flag is omitted
+entirely when the effective list is empty, so a chart with no `allowedGroups`
+set anywhere behaves exactly as before this was added.
 
 ## Credentials
 
@@ -62,6 +118,27 @@ commit it.
 python3 -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
+**`cookie-secret` must be byte-identical in every namespace where this chart
+is released.** With `cookieDomain: .example.com`, a cookie minted by one
+proxy is presented to all the others sharing that domain. If a namespace's
+`cookie-secret` doesn't match, that proxy can't decrypt cookies minted
+elsewhere and rejects them — which shows up as an infinite login redirect
+loop, not a clear auth error. This is the hardest oauth2-proxy symptom to
+diagnose from the outside; if you hit it, checking `cookie-secret` parity
+across every release's Secret is the first thing to try.
+
+### Rotating credentials
+
+Credentials arrive via `secretKeyRef`, so Kubernetes won't restart the proxy
+pods on its own when an external process rotates the Secret's contents — the
+pods keep running with the stale value until something restarts them. The
+Deployment carries `deploymentAnnotations` (default:
+`reloader.stakater.com/auto: "true"`) for this reason: if
+[Reloader](https://github.com/stakater/Reloader) is installed in the cluster,
+it watches the Deployment's annotations and restarts the pods when the
+referenced Secret changes. If Reloader is *not* installed, this annotation is
+inert — rotation still requires a manual restart.
+
 ## Values
 
 | Key | Default | Notes |
@@ -72,9 +149,14 @@ python3 -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).dec
 | `clientId` | `oauth2-proxy` | One client can serve every host |
 | `cookieDomain` | `.example.com` | Shared so one login covers all protected hosts |
 | `existingSecret` | `oauth2-proxy-credentials` | Must exist in the release namespace |
+| `allowedGroups` | `[]` | See [Authorization](#authorization). Overridable per entry |
+| `replicas` | `1` | Overridable per entry |
+| `deploymentAnnotations` | `reloader.stakater.com/auto: "true"` | Applied to the Deployment's `metadata.annotations`, not the pod template |
+| `podSecurityContext` | `runAsNonRoot: true`, `seccompProfile.type: RuntimeDefault` | |
+| `securityContext` | `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `readOnlyRootFilesystem: true` | Container-level; verified against `quay.io/oauth2-proxy/oauth2-proxy:v7.9.0` |
 | `image.tag` | `v7.9.0` | |
 | `resources` | 10m/32Mi request, 128Mi limit | No CPU limit by design |
-| `ingresses` | `[]` | `name`, `host`, `tlsSecret`, `upstream`, `annotations` |
+| `ingresses` | `[]` | `name`, `host`, `tlsSecret`, `upstream` are **required** per entry (no safe default exists for any of them); `replicas`, `allowedGroups`, `annotations` are optional overrides |
 
 `redirect-url` is not configurable — it is always
 `https://<host>/oauth2/callback`, derived from the entry's host. Register
@@ -86,7 +168,41 @@ An entry's `annotations` field is merged with the chart-level defaults
 (specifically the `certIssuer` value, which becomes `cert-manager.io/cluster-issuer`).
 Per-entry annotations take precedence, so you can override the cert issuer for
 a single host by including `cert-manager.io/cluster-issuer` in that entry's
-`annotations`.
+`annotations`. Every annotation value is rendered as a quoted string
+regardless of how it's written in YAML, so `gethomepage.dev/enabled: true`
+(unquoted) and `gethomepage.dev/enabled: "true"` (quoted) render identically —
+the API server always sees a string, never a native boolean.
+
+## Migrating from authentik-proxy-ingress
+
+All three live predecessor releases (Hubble, Prometheus/Alertmanager,
+Longhorn) sit in namespace `authentik`. To move one to this chart **in
+place**, keeping the existing TLS Secret and cert-manager `Certificate`
+untouched:
+
+1. Keep the release in the **same namespace** (`authentik`) and give it the
+   **same release name** as the `authentik-proxy-ingress` release it
+   replaces.
+2. Keep the entry's `name:` **unchanged** — that's what determines the
+   rendered Ingress object's name, and an unchanged name lets Helm adopt the
+   existing Ingress in place rather than create a second one.
+3. Add `upstream:` (the predecessor didn't need it — it pointed the whole
+   host at Authentik's outpost instead of a per-host proxy).
+4. Swap the `chart:` reference from `authentik-proxy-ingress` to
+   `oidc-proxy-ingress`.
+
+Do **not** move the release to a different namespace as part of the
+migration. Nothing about the Ingress or Service *requires* namespace
+`authentik` specifically (see [The namespace
+rule](#the-namespace-rule)) — but changing the namespace changes the
+Ingress object's identity from Helm's point of view, which means two
+Ingresses briefly claim the same host during cutover (undefined behavior
+under Cilium) and a re-issued TLS certificate. Keeping namespace, release
+name and entry `name` all unchanged is what makes this an in-place upgrade
+instead of a cutover.
+
+Before migrating a host that sits behind a NetworkPolicy, see [NetworkPolicy
+prerequisite](#networkpolicy-prerequisite) first.
 
 ## Tests
 
