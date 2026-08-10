@@ -263,6 +263,20 @@ tests:
           value: 3
         documentIndex: 1
 
+  - it: should honour an explicit replicas of 0 instead of falling back to the chart default
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+          replicas: 0
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+        documentIndex: 0
+
   - it: should apply the Reloader annotation to the Deployment metadata by default
     set:
       ingresses:

@@ -2,7 +2,10 @@
 {{- $name := required "ingresses[].name is required" .name }}
 {{- $host := required (printf "ingresses[].host is required for entry %q" $name) .host }}
 {{- $upstream := required (printf "ingresses[].upstream is required for entry %q" $name) .upstream }}
-{{- $replicas := .replicas | default $.Values.replicas }}
+{{- $replicas := $.Values.replicas }}
+{{- if hasKey . "replicas" }}
+{{- $replicas = .replicas }}
+{{- end }}
 {{- $allowedGroups := $.Values.allowedGroups }}
 {{- if hasKey . "allowedGroups" }}
 {{- $allowedGroups = .allowedGroups }}
