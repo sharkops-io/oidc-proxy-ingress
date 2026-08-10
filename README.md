@@ -32,7 +32,7 @@ releases:
   - name: hubble-auth
     namespace: kube-system
     chart: sharkops-oidc-proxy/oidc-proxy-ingress
-    version: 0.3.0
+    version: 0.4.0
     values:
       - hubble-ingress-values.yaml
 ```
@@ -149,6 +149,7 @@ inert — rotation still requires a manual restart.
 | `clientId` | `oauth2-proxy` | One client can serve every host |
 | `cookieDomain` | `.example.com` | Shared so one login covers all protected hosts |
 | `existingSecret` | `oauth2-proxy-credentials` | Must exist in the release namespace |
+| `cookieName` | `_oauth2_proxy` | Must differ between fleets on different issuers sharing a cookie domain. See [Running two fleets](#running-two-fleets) |
 | `allowUnverifiedEmail` | `false` | **Must be `true` against Authentik.** See [Unverified email](#unverified-email) |
 | `allowedGroups` | `[]` | See [Authorization](#authorization). Overridable per entry |
 | `replicas` | `1` | Overridable per entry |
@@ -162,6 +163,24 @@ inert — rotation still requires a manual restart.
 `redirect-url` is not configurable — it is always
 `https://<host>/oauth2/callback`, derived from the entry's host. Register
 that URL on the OIDC client for every protected host.
+
+## Running two fleets
+
+During an IdP migration you may want one host on the new issuer while the rest
+stay on the old one. `issuerUrl` and `clientId` are chart-wide, so that means a
+second release — and the second release needs **both** of these, or it will
+appear to work while proving nothing:
+
+- **Its own `cookieName`.** All instances default to `_oauth2_proxy`, and a
+  browser keeps one cookie of a given name per domain, so two fleets on one
+  `cookieDomain` overwrite each other's sessions.
+- **Its own `existingSecret`**, holding a different `cookie-secret`. Cookie
+  validity is decided by decryption, not by issuer: with a shared secret, a
+  proxy pointed at the new IdP will accept a session minted against the old one
+  and never redirect for a login at all.
+
+Verify isolation explicitly — log into a host on one fleet, then load a host on
+the other and confirm it still demands a login.
 
 ## Unverified email
 

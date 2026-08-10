@@ -57,6 +57,7 @@ spec:
             - --allowed-group={{ . }}
             {{- end }}
             - --cookie-domain={{ $.Values.cookieDomain }}
+            - --cookie-name={{ $.Values.cookieName }}
             - --whitelist-domain={{ $.Values.cookieDomain }}
             - --cookie-secure=true
             - --skip-provider-button=true

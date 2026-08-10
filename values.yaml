@@ -15,6 +15,20 @@ clientId: oauth2-proxy
 # loop rather than a clear error.
 cookieDomain: .example.com
 
+# Name of the session cookie oauth2-proxy sets. oauth2-proxy's own default is
+# `_oauth2_proxy` for every instance, which is fine until two releases share a
+# cookie domain: the browser keeps ONE cookie of a given name per domain, so the
+# second fleet silently overwrites the first fleet's sessions.
+#
+# Give any fleet authenticating against a DIFFERENT issuer its own name. Paired
+# with a different `existingSecret` (and therefore a different cookie-secret)
+# that makes the two fleets mutually unreadable - which is what makes a login
+# test meaningful, since otherwise a cookie minted against the old issuer
+# decrypts fine and satisfies the new proxy without any login happening.
+#
+# Chart-wide on purpose: this identifies the fleet, not the host.
+cookieName: _oauth2_proxy
+
 # Secret in the release namespace holding keys `client-secret` and
 # `cookie-secret`. Matches the sharkops-universal sidecar convention so a
 # single OpenBao path serves both.

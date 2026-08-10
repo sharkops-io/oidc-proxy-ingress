@@ -373,3 +373,39 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].args[3]
           value: --redirect-url=https://hubble.example.com/oauth2/callback
+
+  # Two proxy fleets pointed at different IdPs must not share a cookie name.
+  # oauth2-proxy's default is _oauth2_proxy for every instance, so two releases
+  # on one cookie domain overwrite each other's sessions - and, sharing a
+  # cookie-secret, would each accept the other's cookie as valid.
+  - it: should use the oauth2-proxy default cookie name unless overridden
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-name=_oauth2_proxy
+
+  - it: should render an overridden cookie name
+    set:
+      cookieName: _oauth2_proxy_authelia
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-name=_oauth2_proxy_authelia
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --cookie-name=_oauth2_proxy
+      # The flag must not disturb the positional args other tests pin.
+      - equal:
+          path: spec.template.spec.containers[0].args[3]
+          value: --redirect-url=https://hubble.example.com/oauth2/callback
