@@ -1,0 +1,21 @@
+# Prometheus and Alertmanager, protected. Two entries, two proxy pods, one
+# release.
+ingresses:
+  - name: prometheus
+    host: prometheus.example.com
+    tlsSecret: prometheus-tls
+    upstream: http://prometheus-operated.monitoring.svc.cluster.local:9090
+    annotations:
+      gethomepage.dev/enabled: 'true'
+      gethomepage.dev/group: Observability
+      gethomepage.dev/icon: prometheus
+      gethomepage.dev/name: Prometheus
+  - name: alertmanager
+    host: alertmanager.example.com
+    tlsSecret: alertmanager-tls
+    upstream: http://alertmanager-operated.monitoring.svc.cluster.local:9093
+    annotations:
+      gethomepage.dev/enabled: 'true'
+      gethomepage.dev/group: Observability
+      gethomepage.dev/icon: alertmanager
+      gethomepage.dev/name: Alertmanager

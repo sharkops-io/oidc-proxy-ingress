@@ -1,0 +1,12 @@
+# Hubble UI, protected. Deployed into kube-system so the Ingress and its
+# oauth2-proxy Service share a namespace, as Kubernetes requires.
+ingresses:
+  - name: hubble-ui
+    host: hubble.example.com
+    tlsSecret: hubble-tls
+    upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    annotations:
+      gethomepage.dev/enabled: 'true'
+      gethomepage.dev/group: Observability
+      gethomepage.dev/icon: cilium
+      gethomepage.dev/name: Hubble
