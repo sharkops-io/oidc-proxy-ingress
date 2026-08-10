@@ -2,7 +2,7 @@ apiVersion: v2
 name: oidc-proxy-ingress
 description: Protects an in-cluster service behind oauth2-proxy and an Ingress, against any OIDC issuer.
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "v7.9.0"
 home: https://gitlab.com/sharkops/helm-charts/oidc-proxy-ingress
 sources:

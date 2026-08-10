@@ -32,7 +32,7 @@ releases:
   - name: hubble-auth
     namespace: kube-system
     chart: sharkops-oidc-proxy/oidc-proxy-ingress
-    version: 0.2.0
+    version: 0.3.0
     values:
       - hubble-ingress-values.yaml
 ```
@@ -149,6 +149,7 @@ inert — rotation still requires a manual restart.
 | `clientId` | `oauth2-proxy` | One client can serve every host |
 | `cookieDomain` | `.example.com` | Shared so one login covers all protected hosts |
 | `existingSecret` | `oauth2-proxy-credentials` | Must exist in the release namespace |
+| `allowUnverifiedEmail` | `false` | **Must be `true` against Authentik.** See [Unverified email](#unverified-email) |
 | `allowedGroups` | `[]` | See [Authorization](#authorization). Overridable per entry |
 | `replicas` | `1` | Overridable per entry |
 | `deploymentAnnotations` | `reloader.stakater.com/auto: "true"` | Applied to the Deployment's `metadata.annotations`, not the pod template |
@@ -161,6 +162,38 @@ inert — rotation still requires a manual restart.
 `redirect-url` is not configurable — it is always
 `https://<host>/oauth2/callback`, derived from the entry's host. Register
 that URL on the OIDC client for every protected host.
+
+## Unverified email
+
+If login succeeds and then `/oauth2/callback` returns **500**, check the proxy
+log for:
+
+```
+Error redeeming code during OAuth2 callback: email in id_token (...) isn't verified
+```
+
+The token exchange worked; oauth2-proxy rejected the resulting id_token because
+its `email_verified` claim is false. Authentik's default *OpenID 'email'* scope
+mapping hardcodes exactly that:
+
+```python
+return {
+    "email": request.user.email,
+    "email_verified": False
+}
+```
+
+It has no email-verification flow, so it will not claim otherwise. Set
+`allowUnverifiedEmail: true`.
+
+Despite the flag's name this is not a meaningful weakening **here**: with
+`--email-domain=*` the email claim is not an authorization input, so trust rests
+on the issuer having authenticated the user. It would matter if you granted
+access by email address or domain, where an unverified address becomes an
+impersonation vector. Hence opt-in, and off by default.
+
+The alternative - a custom scope mapping asserting `email_verified: True` - makes
+Authentik state something it has not checked. Prefer the flag.
 
 ## Per-entry annotation overrides
 

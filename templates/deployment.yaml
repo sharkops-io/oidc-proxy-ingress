@@ -50,6 +50,9 @@ spec:
             - --upstream={{ $upstream }}
             - --http-address=[::]:4180
             - --email-domain=*
+            {{- if $.Values.allowUnverifiedEmail }}
+            - --insecure-oidc-allow-unverified-email=true
+            {{- end }}
             {{- range $allowedGroups }}
             - --allowed-group={{ . }}
             {{- end }}

@@ -20,6 +20,22 @@ cookieDomain: .example.com
 # single OpenBao path serves both.
 existingSecret: oauth2-proxy-credentials
 
+# Accept an id_token whose `email_verified` claim is false.
+#
+# Required for Authentik: its default "email" scope mapping hardcodes
+# `email_verified: False`, because Authentik has no email-verification flow and
+# will not assert what it cannot check. oauth2-proxy rejects such a token with
+# "email in id_token (...) isn't verified" and returns 500 from /oauth2/callback
+# - after a SUCCESSFUL login, so it reads as a proxy fault rather than a claim
+# problem.
+#
+# "insecure" overstates it here: with --email-domain=* the email claim is not an
+# authorization input at all. Trust comes from the issuer having authenticated
+# the user. It would matter if access were granted by email address or domain,
+# where an unverified address is an impersonation vector - so this stays
+# opt-in, and off by default.
+allowUnverifiedEmail: false
+
 # OIDC groups permitted to authenticate, chart-wide. Empty (the default)
 # means every identity the issuer authenticates is admitted - with
 # --email-domain=* hardcoded, the IdP's application policy is then the

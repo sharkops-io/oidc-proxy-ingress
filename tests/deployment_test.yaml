@@ -339,3 +339,37 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: 'ingresses[].upstream is required for entry "hubble-ui"'
+
+  # Authentik's default "email" scope mapping hardcodes `email_verified: False`
+  # - it has no email-verification flow, so it will not assert otherwise.
+  # oauth2-proxy then refuses the token exchange with
+  # "email in id_token (...) isn't verified" and serves a 500 from the callback,
+  # AFTER a successful login, which makes it look like a proxy fault.
+  - it: should not allow unverified email by default
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --insecure-oidc-allow-unverified-email=true
+
+  - it: should allow unverified email when asked
+    set:
+      allowUnverifiedEmail: true
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --insecure-oidc-allow-unverified-email=true
+      # The flag must not disturb the positional args other tests pin.
+      - equal:
+          path: spec.template.spec.containers[0].args[3]
+          value: --redirect-url=https://hubble.example.com/oauth2/callback
