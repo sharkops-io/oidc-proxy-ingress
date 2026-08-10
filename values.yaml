@@ -8,13 +8,39 @@ issuerUrl: https://auth.example.com
 clientId: oauth2-proxy
 
 # Cookie scope. Shared across *.example.com so one login covers every
-# protected host.
+# protected host. IMPORTANT: because the cookie is shared, `cookie-secret`
+# (see Credentials below) must be byte-identical in every namespace this
+# chart is released into. A mismatched cookie-secret makes one proxy reject
+# the cookie another proxy minted, which presents as an infinite redirect
+# loop rather than a clear error.
 cookieDomain: .example.com
 
 # Secret in the release namespace holding keys `client-secret` and
 # `cookie-secret`. Matches the sharkops-universal sidecar convention so a
 # single OpenBao path serves both.
 existingSecret: oauth2-proxy-credentials
+
+# OIDC groups permitted to authenticate, chart-wide. Empty (the default)
+# means every identity the issuer authenticates is admitted - with
+# --email-domain=* hardcoded, the IdP's application policy is then the
+# only gate. Settable per entry too; when an entry defines its own
+# `allowedGroups` (even an empty list), that value wins for that host
+# instead of this one. See the README's "Authorization" section.
+allowedGroups: []
+
+# Replicas per proxy Deployment, chart-wide default. Overridable per entry.
+# Cookie-based sessions make this horizontally scalable for free, so bump
+# it for an upstream where one pod going down (e.g. during a node drain)
+# would take the only path to that UI with it.
+replicas: 1
+
+# Annotations applied to the Deployment's metadata (NOT the pod template -
+# Reloader reads annotations off the Deployment object itself). The default
+# restarts the proxy pods when the credentials Secret's content changes, so
+# an external secret rotation actually takes effect. Inert if Reloader
+# isn't installed in the cluster.
+deploymentAnnotations:
+  reloader.stakater.com/auto: "true"
 
 image:
   repository: quay.io/oauth2-proxy/oauth2-proxy
@@ -31,14 +57,39 @@ resources:
   limits:
     memory: 128Mi
 
+# Pod-level securityContext (spec.template.spec.securityContext). Verified
+# against quay.io/oauth2-proxy/oauth2-proxy:v7.9.0, which already runs as
+# UID 65532 by default.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level securityContext for the oauth2-proxy container. Verified
+# with a local `docker run --read-only --cap-drop=ALL` against
+# quay.io/oauth2-proxy/oauth2-proxy:v7.9.0 - it starts cleanly under all
+# three restrictions (no writes to disk in normal operation).
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
 # One entry per protected host. Each renders a Deployment, a Service and an
-# Ingress.
+# Ingress. `name`, `host`, `tlsSecret` and `upstream` are required per
+# entry - there is no safe default for any of them (an unset `tlsSecret`
+# would render a certificate-less Ingress, an unset `host` would render an
+# empty-host catch-all rule).
 #
 # ingresses:
 #   - name: hubble-ui
 #     host: hubble.example.com
 #     tlsSecret: hubble-tls
 #     upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+#     replicas: 2               # optional, overrides the chart-wide `replicas`
+#     allowedGroups:            # optional, overrides the chart-wide `allowedGroups`
+#       - admins
 #     annotations:
 #       gethomepage.dev/enabled: "true"
 #       gethomepage.dev/name: Hubble
