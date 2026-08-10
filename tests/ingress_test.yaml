@@ -98,3 +98,50 @@ tests:
       - equal:
           path: spec.ingressClassName
           value: nginx
+
+  - it: should let an entry annotation override the chart cert-manager issuer
+    set:
+      certIssuer: letsencrypt-prod
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-staging
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-staging
+
+  - it: should not leak an entry's annotation override to other entries
+    set:
+      certIssuer: letsencrypt-prod
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+          annotations:
+            cert-manager.io/cluster-issuer: letsencrypt-staging
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: "hubble-ui"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-staging
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: "longhorn-ui"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-prod
+        documentIndex: 1

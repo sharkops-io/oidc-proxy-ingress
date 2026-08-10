@@ -7,11 +7,9 @@ metadata:
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
+  {{- $annotations := merge (deepCopy (default (dict) .annotations)) (dict "cert-manager.io/cluster-issuer" $.Values.certIssuer) }}
   annotations:
-    cert-manager.io/cluster-issuer: {{ $.Values.certIssuer }}
-    {{- with .annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+    {{- toYaml $annotations | nindent 4 }}
 spec:
   ingressClassName: {{ $.Values.ingressClassName }}
   tls:
