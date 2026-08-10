@@ -1,0 +1,44 @@
+suite: oauth2-proxy service
+templates:
+  - service.yaml
+tests:
+  - it: should create no resources when ingresses is empty
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should create one Service per entry
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should select the matching proxy pods and map 80 to 4180
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: metadata.name
+          value: hubble-ui-oauth2-proxy
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: hubble-ui-oauth2-proxy
+      - equal:
+          path: spec.ports[0].port
+          value: 80
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 4180

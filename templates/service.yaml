@@ -1,0 +1,20 @@
+{{- range .Values.ingresses }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oidc-proxy-ingress.proxyName" .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
+    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" .name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4180
+      protocol: TCP
+{{- end }}
