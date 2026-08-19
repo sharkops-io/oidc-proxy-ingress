@@ -1,0 +1,28 @@
+{{- if .Values.metrics.enabled }}
+{{- range .Values.ingresses }}
+{{- $name := required "ingresses[].name is required" .name }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "oidc-proxy-ingress.proxyName" $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "oidc-proxy-ingress.labels" $ | nindent 4 }}
+    app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
+    # This cluster's Prometheus uses
+    # serviceMonitorSelector: matchLabels{release: kube-prometheus-stack}
+    # with an empty namespaceSelector. Without this label the object applies
+    # cleanly, reports no error, and is silently never scraped.
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}
+{{- end }}

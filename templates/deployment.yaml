@@ -49,6 +49,9 @@ spec:
             - --redirect-url=https://{{ $host }}/oauth2/callback
             - --upstream={{ $upstream }}
             - --http-address=[::]:4180
+            {{- if $.Values.metrics.enabled }}
+            - --metrics-address=[::]:{{ $.Values.metrics.port }}
+            {{- end }}
             - --email-domain=*
             {{- if $.Values.allowUnverifiedEmail }}
             - --insecure-oidc-allow-unverified-email=true
@@ -79,6 +82,10 @@ spec:
           ports:
             - name: http
               containerPort: 4180
+            {{- if $.Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ $.Values.metrics.port }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /ping

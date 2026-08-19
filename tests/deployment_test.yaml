@@ -445,3 +445,78 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --whitelist-domain=.example.com
+
+  # oauth2-proxy v7.9.0 only serves metrics when --metrics-address is set -
+  # without it there is no endpoint at all, so a ServiceMonitor alone
+  # collects nothing. metrics.enabled defaults to true.
+  - it: should set --metrics-address when metrics are enabled
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-address=[::]:44180
+
+  - it: should render a configured metrics port in --metrics-address
+    set:
+      metrics:
+        port: 9091
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-address=[::]:9091
+
+  - it: should omit --metrics-address entirely when metrics are disabled
+    set:
+      metrics:
+        enabled: false
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-address=
+
+  - it: should expose a named metrics container port when enabled
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].name
+          value: metrics
+      - equal:
+          path: spec.template.spec.containers[0].ports[1].containerPort
+          value: 44180
+
+  - it: should not add a metrics container port when disabled
+    set:
+      metrics:
+        enabled: false
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: http
