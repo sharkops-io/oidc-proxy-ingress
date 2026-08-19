@@ -127,6 +127,14 @@ securityContext:
       - ALL
   readOnlyRootFilesystem: true
 
+# oauth2-proxy serves metrics ONLY when --metrics-address is set; without it
+# there is no endpoint at all, so a ServiceMonitor alone collects nothing.
+# These four proxies sit in the auth path for every protected app, so a
+# degradation here surfaces as "nobody can log in" rather than as an alert.
+metrics:
+  enabled: true
+  port: 44180
+
 # One entry per protected host. Each renders a Deployment, a Service and an
 # Ingress. `name`, `host`, `tlsSecret` and `upstream` are required per
 # entry - there is no safe default for any of them (an unset `tlsSecret`

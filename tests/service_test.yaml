@@ -80,3 +80,55 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "ingresses[].name is required"
+
+  # oauth2-proxy only serves metrics when --metrics-address is set on the
+  # container; the Service must expose that port too or nothing outside the
+  # pod can reach it. metrics.enabled defaults to true.
+  - it: should add a metrics Service port when enabled
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.ports[1].name
+          value: metrics
+      - equal:
+          path: spec.ports[1].port
+          value: 44180
+      - equal:
+          path: spec.ports[1].targetPort
+          value: metrics
+
+  - it: should render a configured metrics port on the Service
+    set:
+      metrics:
+        port: 9091
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.ports[1].port
+          value: 9091
+
+  - it: should not add a metrics Service port when disabled
+    set:
+      metrics:
+        enabled: false
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+      - equal:
+          path: spec.ports[0].name
+          value: http
