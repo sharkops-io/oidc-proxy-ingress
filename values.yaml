@@ -95,7 +95,7 @@ deploymentAnnotations:
 
 image:
   repository: quay.io/oauth2-proxy/oauth2-proxy
-  tag: v7.9.0
+  tag: v7.15.4
   pullPolicy: IfNotPresent
 
 # Per-proxy pod resources. Four of these replace one embedded outpost, so
