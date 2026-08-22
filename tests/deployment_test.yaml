@@ -520,3 +520,53 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].ports[0].name
           value: http
+
+  # dnsConfig is OMITTED unless set. This is the assertion that keeps the
+  # default behaviour unchanged for existing consumers -- without it, a
+  # `dnsConfig: {}` default could start rendering an empty `dnsConfig: {}` into
+  # every pod spec and nothing would notice.
+  - it: should not render dnsConfig when it is not set
+    set:
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notExists:
+          path: spec.template.spec.dnsConfig
+
+  # The load-bearing one. `ndots:1` is what makes a Cilium `toFQDNs` allowlist
+  # match at all -- see the note in values.yaml. Asserting the VALUE, not just
+  # that the key exists: an empty or wrong-valued dnsConfig renders fine and
+  # fails only as a silent policy drop at runtime.
+  - it: should render dnsConfig on every Deployment when set
+    set:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+        - name: longhorn-ui
+          host: longhorn.example.com
+          tlsSecret: longhorn-tls
+          upstream: http://longhorn-frontend.longhorn-system.svc.cluster.local:80
+    asserts:
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].name
+          value: ndots
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].value
+          value: "1"
+        documentIndex: 0
+      # BOTH documents, not just the first: the template is inside a `range`,
+      # so a misplaced block could render it for one entry and not the other.
+      - equal:
+          path: spec.template.spec.dnsConfig.options[0].value
+          value: "1"
+        documentIndex: 1

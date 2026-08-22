@@ -135,6 +135,28 @@ metrics:
   enabled: true
   port: 44180
 
+# Pod DNS settings, applied to every proxy Deployment this chart renders.
+#
+# ndots:1 IS NOT COSMETIC WHERE `toFQDNs` IS IN PLAY. Cilium matches the DNS
+# QUESTION NAME, and CoreDNS `autopath` answers the SEARCH-SUFFIXED question
+# directly -- so at kubelet's default ndots:5 the bare name is never asked,
+# Cilium never sees it, and an egress allowlist matches NOTHING while looking
+# perfectly correct. That took Alertmanager's notifications down in the
+# monitoring namespace on 2026-08-22.
+#
+# It must be 1 rather than 2: one-dot names (`gitlab.com`, `hc-ping.com`) still
+# take the search path at 2.
+#
+# Left EMPTY by default so this chart's behaviour does not change for existing
+# consumers. ndots changes only the ORDER names are tried in, never which can
+# resolve, so setting it too low costs at most one extra lookup.
+#
+# dnsConfig:
+#   options:
+#     - name: ndots
+#       value: "1"
+dnsConfig: {}
+
 # One entry per protected host. Each renders a Deployment, a Service and an
 # Ingress. `name`, `host`, `tlsSecret` and `upstream` are required per
 # entry - there is no safe default for any of them (an unset `tlsSecret`
