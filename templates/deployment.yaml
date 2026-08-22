@@ -34,6 +34,10 @@ spec:
         {{- include "oidc-proxy-ingress.labels" $ | nindent 8 }}
         app.kubernetes.io/instance: {{ include "oidc-proxy-ingress.proxyName" $name }}
     spec:
+      {{- with $.Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml $.Values.podSecurityContext | nindent 8 }}
       containers:
