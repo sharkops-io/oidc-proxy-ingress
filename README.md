@@ -25,7 +25,7 @@ of each service instead, so the issuer is just a value.
 # helmfile.yaml
 repositories:
   - name: sharkops-oidc-proxy
-    url: registry.gitlab.com/sharkops/helm-charts/oidc-proxy-ingress
+    url: ghcr.io/sharkops-io/charts
     oci: true
 
 releases:
@@ -288,3 +288,7 @@ prerequisite](#networkpolicy-prerequisite) first.
 ```bash
 helm unittest --strict -f "tests/*.yaml" .
 ```
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).

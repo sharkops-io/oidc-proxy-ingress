@@ -4,9 +4,9 @@ description: Protects an in-cluster service behind oauth2-proxy and an Ingress, 
 type: application
 version: 0.5.0
 appVersion: "v7.9.0"
-home: https://gitlab.com/sharkops/helm-charts/oidc-proxy-ingress
+home: https://github.com/sharkops-io/oidc-proxy-ingress
 sources:
-  - https://gitlab.com/sharkops/helm-charts/oidc-proxy-ingress
+  - https://github.com/sharkops-io/oidc-proxy-ingress
 maintainers:
   - name: Andrew Landsverk
     email: noreply@example.com

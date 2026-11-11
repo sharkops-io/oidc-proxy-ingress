@@ -1,0 +1,21 @@
+# Shared steps live in sharkops-io/.github; this file only says which run.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    uses: sharkops-io/.github/.github/workflows/secret-scan.yml@main
+  chart:
+    needs: [secret-scan]
+    uses: sharkops-io/.github/.github/workflows/chart.yml@main
+    permissions:
+      contents: read
+      packages: write
