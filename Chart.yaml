@@ -8,8 +8,8 @@ home: https://github.com/sharkops-io/oidc-proxy-ingress
 sources:
   - https://github.com/sharkops-io/oidc-proxy-ingress
 maintainers:
-  - name: Andrew Landsverk
-    email: noreply@example.com
+  - name: sharkops-io
+    url: https://github.com/sharkops-io
 keywords:
   - oidc
   - oauth2-proxy

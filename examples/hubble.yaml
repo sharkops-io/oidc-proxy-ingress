@@ -12,6 +12,9 @@
 # release namespace and release name, keep this entry's `name` unchanged
 # so the Ingress object name doesn't change, add `upstream:`, and swap the
 # `chart:` reference.
+issuerUrl: https://auth.example.com
+whitelistDomain: .example.com
+
 ingresses:
   - name: hubble-ui
     host: hubble.example.com
