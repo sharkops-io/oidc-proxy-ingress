@@ -48,7 +48,7 @@ spec:
             {{- toYaml $.Values.securityContext | nindent 12 }}
           args:
             - --provider=oidc
-            - --oidc-issuer-url={{ $.Values.issuerUrl }}
+            - --oidc-issuer-url={{ required "issuerUrl is required" $.Values.issuerUrl }}
             - --client-id={{ $.Values.clientId }}
             - --redirect-url=https://{{ $host }}/oauth2/callback
             - --upstream={{ $upstream }}
@@ -67,7 +67,9 @@ spec:
             - --cookie-domain={{ $.Values.cookieDomain }}
             {{- end }}
             - --cookie-name={{ $.Values.cookieName }}
+            {{- if $.Values.whitelistDomain }}
             - --whitelist-domain={{ $.Values.whitelistDomain }}
+            {{- end }}
             - --cookie-secure=true
             - --skip-provider-button=true
             - --reverse-proxy=true

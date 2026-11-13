@@ -37,6 +37,18 @@ releases:
       - hubble-ingress-values.yaml
 ```
 
+```yaml
+# hubble-ingress-values.yaml
+issuerUrl: https://auth.example.com   # required
+whitelistDomain: .example.com          # so post-login redirects across hosts work
+
+ingresses:
+  - name: hubble-ui
+    host: hubble.example.com
+    tlsSecret: hubble-tls
+    upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+```
+
 ## The namespace rule
 
 A Kubernetes Ingress backend Service **must be in the Ingress's own
@@ -64,11 +76,10 @@ of the previous path. Concretely, add an ingress rule like:
           app.kubernetes.io/component: oauth2-proxy
 ```
 
-At the time of writing, Prometheus, Alertmanager and the Longhorn frontend
-are each behind a NetworkPolicy that only admits Authentik's outpost pods —
-none of them admit this chart's pods yet. Hubble has no NetworkPolicy, so it
-needs no change here. Editing those policies is a separate piece of work;
-this chart only gives them something stable to select on.
+A policy written for a previous auth path (for example one that only admits
+Authentik's outpost pods) will not admit this chart's pods until you add that
+rule. An upstream with no NetworkPolicy needs no change. Editing those policies
+is outside this chart; it only gives them something stable to select on.
 
 ## Authorization
 
@@ -111,18 +122,18 @@ Each release needs a Secret in its namespace with two keys:
 | `cookie-secret` | 32 random bytes, base64url |
 
 The key names match the `sharkops-universal` oauth2-proxy sidecar, so one
-OpenBao path can serve both. Deliver it with an `ExternalSecret`; do not
+secret-store path can serve both. Deliver it with an `ExternalSecret`; do not
 commit it.
 
 ```bash
 python3 -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 ```
 
-**`cookie-secret` must be byte-identical in every namespace where this chart
-is released.** With `cookieDomain: .example.com`, a cookie minted by one
-proxy is presented to all the others sharing that domain. If a namespace's
-`cookie-secret` doesn't match, that proxy can't decrypt cookies minted
-elsewhere and rejects them — which shows up as an infinite login redirect
+**When `cookieDomain` is set, `cookie-secret` must be byte-identical in every
+namespace where this chart is released.** With `cookieDomain: .example.com`, a
+cookie minted by one proxy is presented to all the others sharing that
+domain. If a namespace's `cookie-secret` doesn't match, that proxy can't
+decrypt cookies minted elsewhere and rejects them — which shows up as an infinite login redirect
 loop, not a clear auth error. This is the hardest oauth2-proxy symptom to
 diagnose from the outside; if you hit it, checking `cookie-secret` parity
 across every release's Secret is the first thing to try.
@@ -145,10 +156,10 @@ inert — rotation still requires a manual restart.
 |---|---|---|
 | `ingressClassName` | `cilium` | |
 | `certIssuer` | `letsencrypt-prod` | |
-| `issuerUrl` | `https://auth.example.com` | The only line that changes when the IdP changes |
+| `issuerUrl` | `""` | **Required** (e.g. `https://auth.example.com`); rendering fails without it. The only line that changes when the IdP changes |
 | `clientId` | `oauth2-proxy` | One client can serve every host |
-| `cookieDomain` | `.example.com` | Empty scopes the cookie per host. See [Cookie scope](#cookie-scope) |
-| `whitelistDomain` | `.example.com` | Post-login redirect whitelist; separate from `cookieDomain` on purpose |
+| `cookieDomain` | `""` | Empty omits the flag and scopes the cookie per host; set a parent domain (e.g. `.example.com`) for one shared login. See [Cookie scope](#cookie-scope) |
+| `whitelistDomain` | `""` | Post-login redirect whitelist. Set it to your parent domain (e.g. `.example.com`) so post-login redirects across hosts work; empty omits the flag. Separate from `cookieDomain` on purpose |
 | `existingSecret` | `oauth2-proxy-credentials` | Must exist in the release namespace |
 | `cookieName` | `_oauth2_proxy` | Must differ between fleets on different issuers sharing a cookie domain. See [Running two fleets](#running-two-fleets) |
 | `allowUnverifiedEmail` | `false` | **Must be `true` against Authentik.** See [Unverified email](#unverified-email) |
@@ -182,7 +193,7 @@ Leave `cookieDomain` empty to omit the flag; oauth2-proxy then scopes each
 cookie to its own host. SSO still works, because the IdP keeps its own session —
 the extra hop is a silent redirect, not a second login.
 
-`whitelistDomain` stays set to the parent domain either way. It governs where
+Set `whitelistDomain` to the parent domain either way. It governs where
 oauth2-proxy will redirect after login, and collapsing it with `cookieDomain`
 would start rejecting valid post-login redirects.
 
@@ -233,10 +244,10 @@ on the issuer having authenticated the user. It would matter if you granted
 access by email address or domain, where an unverified address becomes an
 impersonation vector. Hence opt-in, and off by default.
 
-That reasoning does not depend on network position. The current consumers happen
-to be LAN-only, but do not treat that as the justification - a chart used on an
-internet-facing host would be equally safe under `--email-domain=*` and equally
-unsafe if it gated on the address.
+That reasoning does not depend on network position. Do not treat a LAN-only
+deployment as the justification - a chart used on an internet-facing host would
+be equally safe under `--email-domain=*` and equally unsafe if it gated on the
+address.
 
 The alternative - a custom scope mapping asserting `email_verified: True` - makes
 Authentik state something it has not checked. Prefer the flag.
@@ -254,10 +265,9 @@ the API server always sees a string, never a native boolean.
 
 ## Migrating from authentik-proxy-ingress
 
-All three live predecessor releases (Hubble, Prometheus/Alertmanager,
-Longhorn) sit in namespace `authentik`. To move one to this chart **in
-place**, keeping the existing TLS Secret and cert-manager `Certificate`
-untouched:
+To move an `authentik-proxy-ingress` release to this chart **in place**,
+keeping the existing TLS Secret and cert-manager `Certificate` untouched (the
+examples below assume the predecessor lives in namespace `authentik`):
 
 1. Keep the release in the **same namespace** (`authentik`) and give it the
    **same release name** as the `authentik-proxy-ingress` release it

@@ -2,6 +2,9 @@
 # release, sharing whatever namespace the release itself is deployed into
 # (see examples/hubble.yaml for why that's independent of the upstream's
 # namespace).
+issuerUrl: https://auth.example.com
+whitelistDomain: .example.com
+
 ingresses:
   - name: prometheus
     host: prometheus.example.com

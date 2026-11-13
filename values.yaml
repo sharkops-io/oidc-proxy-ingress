@@ -2,9 +2,11 @@
 ingressClassName: cilium
 certIssuer: letsencrypt-prod
 
-# The OIDC issuer oauth2-proxy authenticates against. Issuer-agnostic on
-# purpose: this is the only line that changes when the IdP changes.
-issuerUrl: https://auth.example.com
+# The OIDC issuer oauth2-proxy authenticates against, e.g.
+# `https://auth.example.com`. REQUIRED: rendering fails without it whenever
+# `ingresses` is non-empty. Issuer-agnostic on purpose: this is the only line
+# that changes when the IdP changes.
+issuerUrl: ""
 clientId: oauth2-proxy
 
 # Cookie scope.
@@ -17,22 +19,24 @@ clientId: oauth2-proxy
 # narrowed. The cost grows with each protected host and is paid by services
 # that get no benefit from it.
 #
-# Leave EMPTY to omit the flag, and oauth2-proxy scopes the cookie to the
-# request host by itself. Each protected host then keeps its own session, and
-# SSO still works - the IdP's own session cookie means the extra hop is a
-# silent redirect rather than a second login.
+# Leave EMPTY (the default) to omit the flag, and oauth2-proxy scopes the
+# cookie to the request host by itself. Each protected host then keeps its
+# own session, and SSO still works - the IdP's own session cookie means the
+# extra hop is a silent redirect rather than a second login.
 #
 # IMPORTANT when this IS set to a shared parent: `cookie-secret` (see
 # Credentials below) must be byte-identical in every namespace this chart is
 # released into. A mismatched cookie-secret makes one proxy reject a cookie
 # another proxy minted, which presents as an infinite redirect loop rather
 # than a clear error.
-cookieDomain: .example.com
+cookieDomain: ""
 
-# Domains oauth2-proxy will redirect to after login. Deliberately SEPARATE from
-# cookieDomain: emptying that one scopes cookies per host, but the redirect
-# whitelist must still span the domain or post-login redirects get rejected.
-whitelistDomain: .example.com
+# Domains oauth2-proxy will redirect to after login. Set it to your parent
+# domain (e.g. `.example.com`) so post-login redirects across hosts work.
+# Deliberately SEPARATE from cookieDomain: emptying that one scopes cookies per
+# host, but the redirect whitelist must still span the domain or post-login
+# redirects get rejected. Empty (the default) omits the flag.
+whitelistDomain: ""
 
 # Name of the session cookie oauth2-proxy sets. oauth2-proxy's own default is
 # `_oauth2_proxy` for every instance, which is fine until two releases share a
@@ -50,7 +54,7 @@ cookieName: _oauth2_proxy
 
 # Secret in the release namespace holding keys `client-secret` and
 # `cookie-secret`. Matches the sharkops-universal sidecar convention so a
-# single OpenBao path serves both.
+# single secret-store path serves both.
 existingSecret: oauth2-proxy-credentials
 
 # Accept an id_token whose `email_verified` claim is false.
@@ -66,9 +70,8 @@ existingSecret: oauth2-proxy-credentials
 # authorization input at all. Trust comes from the issuer having authenticated
 # the user. It would matter if access were granted by email address or domain,
 # where an unverified address is an impersonation vector - so this stays
-# opt-in, and off by default. (Note the current consumers are LAN-only, which
-# lowers the stakes but is NOT the reason this is safe - the reason is that the
-# claim gates nothing.)
+# opt-in, and off by default. (Being LAN-only would lower the stakes but is NOT
+# the reason this is safe - the reason is that the claim gates nothing.)
 allowUnverifiedEmail: false
 
 # OIDC groups permitted to authenticate, chart-wide. Empty (the default)
@@ -98,7 +101,7 @@ image:
   tag: v7.15.6
   pullPolicy: IfNotPresent
 
-# Per-proxy pod resources. Four of these replace one embedded outpost, so
+# Per-proxy pod resources. A release runs one proxy per protected host, so
 # keep them small. No CPU limit - throttling a login path is worse than
 # letting it burst.
 resources:
@@ -129,7 +132,7 @@ securityContext:
 
 # oauth2-proxy serves metrics ONLY when --metrics-address is set; without it
 # there is no endpoint at all, so a ServiceMonitor alone collects nothing.
-# These four proxies sit in the auth path for every protected app, so a
+# These proxies sit in the auth path for every protected app, so a
 # degradation here surfaces as "nobody can log in" rather than as an alert.
 metrics:
   enabled: true
@@ -141,8 +144,8 @@ metrics:
 # QUESTION NAME, and CoreDNS `autopath` answers the SEARCH-SUFFIXED question
 # directly -- so at kubelet's default ndots:5 the bare name is never asked,
 # Cilium never sees it, and an egress allowlist matches NOTHING while looking
-# perfectly correct. That took Alertmanager's notifications down in the
-# monitoring namespace on 2026-08-22.
+# perfectly correct -- e.g. Alertmanager silently unable to reach its
+# notification receivers.
 #
 # It must be 1 rather than 2: one-dot names (`gitlab.com`, `hc-ping.com`) still
 # take the search path at 2.

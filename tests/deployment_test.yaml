@@ -1,6 +1,10 @@
 suite: oauth2-proxy deployment
 templates:
   - deployment.yaml
+# issuerUrl has no default and is required; every test that renders an entry
+# needs one. Tests that care about its value override it.
+set:
+  issuerUrl: https://auth.example.com
 tests:
   - it: should create no resources when ingresses is empty
     asserts:
@@ -128,6 +132,8 @@ tests:
     # Deleting any one of these from the template left all tests green
     # before this test existed - assert them explicitly.
     set:
+      cookieDomain: .example.com
+      whitelistDomain: .example.com
       ingresses:
         - name: hubble-ui
           host: hubble.example.com
@@ -430,6 +436,7 @@ tests:
   - it: should omit --cookie-domain entirely when it is empty
     set:
       cookieDomain: ""
+      whitelistDomain: .example.com
       ingresses:
         - name: hubble-ui
           host: hubble.example.com
@@ -445,6 +452,34 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --whitelist-domain=.example.com
+
+  - it: should omit --whitelist-domain entirely when it is empty
+    set:
+      whitelistDomain: ""
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --whitelist-domain=
+          any: true
+
+  # No default issuer: a guessed one would fail only at login time, as a
+  # redirect to a host that is not the operator's IdP.
+  - it: should fail to render an entry without issuerUrl
+    set:
+      issuerUrl: ""
+      ingresses:
+        - name: hubble-ui
+          host: hubble.example.com
+          tlsSecret: hubble-tls
+          upstream: http://hubble-ui.kube-system.svc.cluster.local:80
+    asserts:
+      - failedTemplate:
+          errorPattern: "issuerUrl is required"
 
   # oauth2-proxy v7.9.0 only serves metrics when --metrics-address is set -
   # without it there is no endpoint at all, so a ServiceMonitor alone
